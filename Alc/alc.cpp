@@ -956,7 +956,7 @@ static void alc_initconfig(void)
         }
         TRACE("Supported backends: %s\n", names.c_str());
     }
-    ReadALConfig();
+    //ReadALConfig();
 
     str = getenv("__ALSOFT_SUSPEND_CONTEXT");
     if(str && *str)
