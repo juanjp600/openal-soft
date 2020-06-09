@@ -187,6 +187,8 @@ ALC_API ALCboolean ALC_APIENTRY alcCloseDevice(ALCdevice *device);
  */
 ALC_API ALCenum ALC_APIENTRY alcGetError(ALCdevice *device);
 
+ALC_API void ALC_APIENTRY alcSetErrorReasonCallback(void (*c)(const char*));
+
 /**
  * Extension support.
  *

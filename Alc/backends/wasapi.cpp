@@ -57,6 +57,7 @@
 #include "compat.h"
 #include "converter.h"
 
+extern void alcCallErrorReasonCallback(std::string reason);
 
 /* Some headers seem to define these as macros for __uuidof, which is annoying
  * since some headers don't declare them at all. Hopefully the ifdef is enough
@@ -1222,7 +1223,9 @@ ALCenum WasapiCapture::open(const ALCchar *name)
     mNotifyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if(mNotifyEvent == nullptr)
     {
-        ERR("Failed to create notify event: %lu\n", GetLastError());
+        DWORD error = GetLastError();
+        ERR("Failed to create notify event: %lu\n", error);
+        alcCallErrorReasonCallback(std::string("WASAPI capture open failed: failed to create notify event (")+std::to_string(error)+")");
         hr = E_FAIL;
     }
 
@@ -1268,6 +1271,7 @@ ALCenum WasapiCapture::open(const ALCchar *name)
 
         mDevId.clear();
 
+        alcCallErrorReasonCallback(std::string("WASAPI capture open failed: HRESULT ")+std::to_string(hr)+" (1)");
         ERR("Device init failed: 0x%08lx\n", hr);
         return ALC_INVALID_VALUE;
     }
@@ -1275,6 +1279,7 @@ ALCenum WasapiCapture::open(const ALCchar *name)
     hr = pushMessage(MsgType::ResetDevice).get();
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture open failed: HRESULT ")+std::to_string(hr)+" (2)");
         if(hr == E_OUTOFMEMORY)
             return ALC_OUT_OF_MEMORY;
         return ALC_INVALID_VALUE;
@@ -1308,6 +1313,7 @@ HRESULT WasapiCapture::openProxy()
 
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy open failed: HRESULT ")+std::to_string(hr));
         if(mMMDev)
             mMMDev->Release();
         mMMDev = nullptr;
@@ -1337,6 +1343,7 @@ HRESULT WasapiCapture::resetProxy()
     HRESULT hr{mMMDev->Activate(IID_IAudioClient, CLSCTX_INPROC_SERVER, nullptr, &ptr)};
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to reactivate audio client (HRESULT ")+std::to_string(hr)+")");
         ERR("Failed to reactivate audio client: 0x%08lx\n", hr);
         return hr;
     }
@@ -1418,6 +1425,7 @@ HRESULT WasapiCapture::resetProxy()
     hr = mClient->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, &OutputType.Format, &wfx);
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to check format support (HRESULT ")+std::to_string(hr)+")");
         ERR("Failed to check format support: 0x%08lx\n", hr);
         return hr;
     }
@@ -1525,6 +1533,7 @@ HRESULT WasapiCapture::resetProxy()
         0, &OutputType.Format, nullptr);
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to initialize audio client (HRESULT ")+std::to_string(hr)+")");
         ERR("Failed to initialize audio client: 0x%08lx\n", hr);
         return hr;
     }
@@ -1536,6 +1545,7 @@ HRESULT WasapiCapture::resetProxy()
         hr = mClient->GetBufferSize(&buffer_len);
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to get buffer size (HRESULT ")+std::to_string(hr)+")");
         ERR("Failed to get buffer size: 0x%08lx\n", hr);
         return hr;
     }
@@ -1547,6 +1557,7 @@ HRESULT WasapiCapture::resetProxy()
     mRing = CreateRingBuffer(buffer_len, mDevice->frameSizeFromFmt(), false);
     if(!mRing)
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to allocate capture ring buffer"));
         ERR("Failed to allocate capture ring buffer\n");
         return E_OUTOFMEMORY;
     }
@@ -1554,6 +1565,7 @@ HRESULT WasapiCapture::resetProxy()
     hr = mClient->SetEventHandle(mNotifyEvent);
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to set event handle (HRESULT ")+std::to_string(hr)+")");
         ERR("Failed to set event handle: 0x%08lx\n", hr);
         return hr;
     }
@@ -1565,6 +1577,10 @@ HRESULT WasapiCapture::resetProxy()
 ALCboolean WasapiCapture::start()
 {
     HRESULT hr{pushMessage(MsgType::StartDevice).get()};
+    if (FAILED(hr))
+    {
+        alcCallErrorReasonCallback(std::string("WASAPI capture start failed: HRESULT ")+std::to_string(hr));
+    }
     return SUCCEEDED(hr) ? ALC_TRUE : ALC_FALSE;
 }
 
@@ -1575,6 +1591,7 @@ HRESULT WasapiCapture::startProxy()
     HRESULT hr{mClient->Start()};
     if(FAILED(hr))
     {
+        alcCallErrorReasonCallback(std::string("WASAPI capture start failed: failed to start audio client (HRESULT ")+std::to_string(hr)+")");
         ERR("Failed to start audio client: 0x%08lx\n", hr);
         return hr;
     }
@@ -1588,9 +1605,17 @@ HRESULT WasapiCapture::startProxy()
             mKillNow.store(false, std::memory_order_release);
             mThread = std::thread{std::mem_fn(&WasapiCapture::recordProc), this};
         }
+        catch(std::exception& e) {
+            mCapture->Release();
+            mCapture = nullptr;
+            alcCallErrorReasonCallback(std::string("WASAPI capture start failed: failed to start thread (")+e.what()+")");
+            ERR("Failed to start thread\n");
+            hr = E_FAIL;
+        }
         catch(...) {
             mCapture->Release();
             mCapture = nullptr;
+            alcCallErrorReasonCallback(std::string("WASAPI capture start failed: failed to start thread (unknown exception type)"));
             ERR("Failed to start thread\n");
             hr = E_FAIL;
         }
@@ -1649,6 +1674,12 @@ bool WasapiBackendFactory::init()
         InitResult = future.get();
     }
     catch(...) {
+        //TODO: log this?
+    }
+
+    if (FAILED(InitResult))
+    {
+        alcCallErrorReasonCallback(std::string("WASAPI backend factory init failed: HRESULT ")+std::to_string(InitResult));
     }
 
     return SUCCEEDED(InitResult) ? ALC_TRUE : ALC_FALSE;

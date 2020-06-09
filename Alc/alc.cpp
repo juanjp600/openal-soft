@@ -2692,6 +2692,20 @@ START_API_FUNC
 }
 END_API_FUNC
 
+static void (*errorReasonCallback)(const char*) = 0;
+
+void alcCallErrorReasonCallback(std::string reason)
+{
+    if (errorReasonCallback != 0) { errorReasonCallback(reason.c_str()); }
+}
+
+ALC_API void ALC_APIENTRY alcSetErrorReasonCallback(void (*c)(const char*))
+START_API_FUNC
+{
+    errorReasonCallback = c;
+    return;
+}
+END_API_FUNC
 
 /* alcSuspendContext
  *
@@ -2705,7 +2719,9 @@ START_API_FUNC
 
     ContextRef ctx{VerifyContext(context)};
     if(!ctx)
+    {
         alcSetError(nullptr, ALC_INVALID_CONTEXT);
+    }
     else
         ALCcontext_DeferUpdates(ctx.get());
 }
@@ -2723,7 +2739,9 @@ START_API_FUNC
 
     ContextRef ctx{VerifyContext(context)};
     if(!ctx)
+    {
         alcSetError(nullptr, ALC_INVALID_CONTEXT);
+    }
     else
         ALCcontext_ProcessUpdates(ctx.get());
 }
@@ -2824,7 +2842,9 @@ START_API_FUNC
     case ALC_HRTF_SPECIFIER_SOFT:
         dev = VerifyDevice(Device);
         if(!dev)
+        {
             alcSetError(nullptr, ALC_INVALID_DEVICE);
+        }
         else
         {
             std::lock_guard<std::mutex> _{dev->StateLock};
@@ -2858,6 +2878,7 @@ static ALCsizei GetIntegerv(ALCdevice *device, ALCenum param, const al::span<ALC
 
     if(values.empty())
     {
+        alcCallErrorReasonCallback("alcGetIntegerv failed: values empty");
         alcSetError(device, ALC_INVALID_VALUE);
         return 0;
     }
@@ -3903,12 +3924,14 @@ START_API_FUNC
 
     if(!CaptureBackend.name)
     {
+        alcCallErrorReasonCallback("alcCaptureOpenDevice failed: CaptureBackend name is null");
         alcSetError(nullptr, ALC_INVALID_VALUE);
         return nullptr;
     }
 
     if(samples <= 0)
     {
+        alcCallErrorReasonCallback("alcCaptureOpenDevice failed: samples <= 0");
         alcSetError(nullptr, ALC_INVALID_VALUE);
         return nullptr;
     }
@@ -3921,6 +3944,7 @@ START_API_FUNC
     device->Frequency = frequency;
     if(DecomposeDevFormat(format, &device->FmtChans, &device->FmtType) == AL_FALSE)
     {
+        alcCallErrorReasonCallback("alcCaptureOpenDevice failed: DecomposeDevFormat failed");
         alcSetError(nullptr, ALC_INVALID_ENUM);
         return nullptr;
     }
@@ -3945,6 +3969,7 @@ START_API_FUNC
     }
     catch(al::backend_exception &e) {
         WARN("Failed to open capture device: %s\n", e.what());
+        alcCallErrorReasonCallback(std::string("alcCaptureOpenDevice failed: exception thrown (")+e.what()+")");
         alcSetError(nullptr, e.errorCode());
         return nullptr;
     }
@@ -3968,11 +3993,13 @@ START_API_FUNC
     auto iter = std::lower_bound(DeviceList.cbegin(), DeviceList.cend(), device);
     if(iter == DeviceList.cend() || *iter != device)
     {
+        alcCallErrorReasonCallback("alcCaptureCloseDevice failed: iterator couldn't find correct device");
         alcSetError(nullptr, ALC_INVALID_DEVICE);
         return ALC_FALSE;
     }
     if((*iter)->Type != Capture)
     {
+        alcCallErrorReasonCallback("alcCaptureCloseDevice failed: device is not capture device");
         alcSetError(*iter, ALC_INVALID_DEVICE);
         return ALC_FALSE;
     }
@@ -3998,19 +4025,24 @@ START_API_FUNC
     DeviceRef dev{VerifyDevice(device)};
     if(!dev || dev->Type != Capture)
     {
+        alcCallErrorReasonCallback("alcCaptureStart failed: device is not capture device");
         alcSetError(dev.get(), ALC_INVALID_DEVICE);
         return;
     }
 
     std::lock_guard<std::mutex> _{dev->StateLock};
     if(!dev->Connected.load(std::memory_order_acquire))
+    {
+        alcCallErrorReasonCallback("alcCaptureStart failed: device could not be loaded");
         alcSetError(dev.get(), ALC_INVALID_DEVICE);
+    }
     else if(!dev->Flags.get<DeviceRunning>())
     {
         if(dev->Backend->start())
             dev->Flags.set<DeviceRunning>();
         else
         {
+            alcCallErrorReasonCallback("alcCaptureStart failed: backend start failed");
             aluHandleDisconnect(dev.get(), "Device start failure");
             alcSetError(dev.get(), ALC_INVALID_DEVICE);
         }
@@ -4023,7 +4055,10 @@ START_API_FUNC
 {
     DeviceRef dev{VerifyDevice(device)};
     if(!dev || dev->Type != Capture)
+    {
+        alcCallErrorReasonCallback("alcCaptureStop failed: device is not capture device");
         alcSetError(dev.get(), ALC_INVALID_DEVICE);
+    }
     else
     {
         std::lock_guard<std::mutex> _{dev->StateLock};
@@ -4040,6 +4075,7 @@ START_API_FUNC
     DeviceRef dev{VerifyDevice(device)};
     if(!dev || dev->Type != Capture)
     {
+        alcCallErrorReasonCallback("alcCaptureSamples failed: device is not capture device");
         alcSetError(dev.get(), ALC_INVALID_DEVICE);
         return;
     }
