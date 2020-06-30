@@ -161,9 +161,11 @@ BackendInfo BackendList[] = {
     { "qsa", QSABackendFactory::getFactory },
 #endif
 #ifdef HAVE_DSOUND
+#error no dsound >:(
     { "dsound", DSoundBackendFactory::getFactory },
 #endif
 #ifdef HAVE_WINMM
+#error no winmm >:(
     { "winmm", WinMMBackendFactory::getFactory },
 #endif
 #ifdef HAVE_PORTAUDIO

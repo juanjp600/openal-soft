@@ -125,7 +125,6 @@ DEFINE_PROPERTYKEY(PKEY_AudioEndpoint_GUID, 0x1da5d803, 0xd492, 0x4edd, 0x8c, 0x
 #include "compat.h"
 #include "threads.h"
 
-
 #if defined(HAVE_GCC_GET_CPUID) && (defined(__i386__) || defined(__x86_64__) || \
                                     defined(_M_IX86) || defined(_M_X64))
 using reg_type = unsigned int;
@@ -482,6 +481,7 @@ void *GetSymbol(void *handle, const char *name)
     return ret;
 }
 
+extern void alcCallErrorReasonCallback(std::string reason);
 
 void al_print(FILE *logfile, const char *fmt, ...)
 {
@@ -501,6 +501,8 @@ void al_print(FILE *logfile, const char *fmt, ...)
     }
     va_end(args2);
     va_end(args);
+
+    alcCallErrorReasonCallback(str);
 
     std::wstring wstr{utf8_to_wstr(str)};
     fprintf(logfile, "%ls", wstr.c_str());
