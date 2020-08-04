@@ -7,13 +7,9 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
-#endif
-#ifdef HAVE_WINDOWS_H
-#include <windows.h>
-#else
-#include <unistd.h>
 #endif
 
 
@@ -22,49 +18,47 @@ void *al_malloc(size_t alignment, size_t size)
     assert((alignment & (alignment-1)) == 0);
     alignment = std::max(alignment, alignof(std::max_align_t));
 
-#if defined(HAVE_ALIGNED_ALLOC)
+#if defined(HAVE_STD_ALIGNED_ALLOC)
     size = (size+(alignment-1))&~(alignment-1);
-    return aligned_alloc(alignment, size);
+    return std::aligned_alloc(alignment, size);
 #elif defined(HAVE_POSIX_MEMALIGN)
-    void *ret;
+    void *ret{};
     if(posix_memalign(&ret, alignment, size) == 0)
         return ret;
     return nullptr;
 #elif defined(HAVE__ALIGNED_MALLOC)
     return _aligned_malloc(size, alignment);
 #else
-    char *ret = static_cast<char*>(malloc(size+alignment));
-    if(ret != nullptr)
+    size_t total_size{size + alignment-1 + sizeof(void*)};
+    void *base{std::malloc(total_size)};
+    if(base != nullptr)
     {
-        *(ret++) = 0x00;
-        while(((ptrdiff_t)ret&(alignment-1)) != 0)
-            *(ret++) = 0x55;
+        void *aligned_ptr{static_cast<char*>(base) + sizeof(void*)};
+        total_size -= sizeof(void*);
+
+        std::align(alignment, size, aligned_ptr, total_size);
+        *(static_cast<void**>(aligned_ptr)-1) = base;
+        base = aligned_ptr;
     }
-    return ret;
+    return base;
 #endif
 }
 
 void *al_calloc(size_t alignment, size_t size)
 {
-    void *ret = al_malloc(alignment, size);
-    if(ret) memset(ret, 0, size);
+    void *ret{al_malloc(alignment, size)};
+    if(ret) std::memset(ret, 0, size);
     return ret;
 }
 
 void al_free(void *ptr) noexcept
 {
-#if defined(HAVE_ALIGNED_ALLOC) || defined(HAVE_POSIX_MEMALIGN)
-    free(ptr);
+#if defined(HAVE_STD_ALIGNED_ALLOC) || defined(HAVE_POSIX_MEMALIGN)
+    std::free(ptr);
 #elif defined(HAVE__ALIGNED_MALLOC)
     _aligned_free(ptr);
 #else
     if(ptr != nullptr)
-    {
-        char *finder = static_cast<char*>(ptr);
-        do {
-            --finder;
-        } while(*finder == 0x55);
-        free(finder);
-    }
+        std::free(*(static_cast<void**>(ptr) - 1));
 #endif
 }

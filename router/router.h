@@ -17,18 +17,6 @@
 #include "AL/alext.h"
 
 
-#ifndef UNUSED
-#if defined(__cplusplus)
-#define UNUSED(x)
-#elif defined(__GNUC__)
-#define UNUSED(x) UNUSED_##x __attribute__((unused))
-#elif defined(__LCLINT__)
-#define UNUSED(x) /*@unused@*/ x
-#else
-#define UNUSED(x) x
-#endif
-#endif
-
 #define MAKE_ALC_VER(major, minor) (((major)<<8) | (minor))
 
 struct DriverIface {
@@ -152,9 +140,9 @@ extern std::atomic<DriverIface*> CurrentCtxDriver;
 
 
 class PtrIntMap {
-    ALvoid **mKeys{nullptr};
+    void **mKeys{nullptr};
     /* Shares memory with keys. */
-    ALint *mValues{nullptr};
+    int *mValues{nullptr};
 
     ALsizei mSize{0};
     ALsizei mCapacity{0};
@@ -164,9 +152,9 @@ public:
     PtrIntMap() = default;
     ~PtrIntMap();
 
-    ALenum insert(ALvoid *key, ALint value);
-    ALint removeByKey(ALvoid *key);
-    ALint lookupByKey(ALvoid *key);
+    ALenum insert(void *key, int value);
+    int removeByKey(void *key);
+    int lookupByKey(void *key);
 };
 
 

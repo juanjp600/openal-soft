@@ -20,13 +20,17 @@
 
 #include "config.h"
 
+#include "opthelpers.h"
 #include "threads.h"
 
-#include <limits>
 #include <system_error>
 
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#include <limits>
 
 void althrd_setname(const char *name)
 {
@@ -42,7 +46,7 @@ void althrd_setname(const char *name)
 #pragma pack(pop)
     info.dwType = 0x1000;
     info.szName = name;
-    info.dwThreadID = -1;
+    info.dwThreadID = ~DWORD{0};
     info.dwFlags = 0;
 
     __try {
@@ -72,21 +76,21 @@ semaphore::~semaphore()
 
 void semaphore::post()
 {
-    if(!ReleaseSemaphore(mSem, 1, nullptr))
+    if UNLIKELY(!ReleaseSemaphore(static_cast<HANDLE>(mSem), 1, nullptr))
         throw std::system_error(std::make_error_code(std::errc::value_too_large));
 }
 
 void semaphore::wait() noexcept
-{ WaitForSingleObject(mSem, INFINITE); }
+{ WaitForSingleObject(static_cast<HANDLE>(mSem), INFINITE); }
 
 bool semaphore::try_wait() noexcept
-{ return WaitForSingleObject(mSem, 0) == WAIT_OBJECT_0; }
+{ return WaitForSingleObject(static_cast<HANDLE>(mSem), 0) == WAIT_OBJECT_0; }
 
 } // namespace al
 
 #else
 
-#include <cerrno>
+#if defined(HAVE_PTHREAD_SETNAME_NP) || defined(HAVE_PTHREAD_SET_NAME_NP)
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
@@ -94,24 +98,25 @@ bool semaphore::try_wait() noexcept
 
 void althrd_setname(const char *name)
 {
-#if defined(HAVE_PTHREAD_SETNAME_NP)
-#if defined(PTHREAD_SETNAME_NP_ONE_PARAM)
+#if defined(HAVE_PTHREAD_SET_NAME_NP)
+    pthread_set_name_np(pthread_self(), name);
+#elif defined(PTHREAD_SETNAME_NP_ONE_PARAM)
     pthread_setname_np(name);
 #elif defined(PTHREAD_SETNAME_NP_THREE_PARAMS)
     pthread_setname_np(pthread_self(), "%s", (void*)name);
 #else
     pthread_setname_np(pthread_self(), name);
 #endif
-#elif defined(HAVE_PTHREAD_SET_NAME_NP)
-    pthread_set_name_np(pthread_self(), name);
-#else
-    (void)name;
-#endif
 }
 
-namespace al {
+#else
+
+void althrd_setname(const char*) { }
+#endif
 
 #ifdef __APPLE__
+
+namespace al {
 
 semaphore::semaphore(unsigned int initial)
 {
@@ -132,7 +137,13 @@ void semaphore::wait() noexcept
 bool semaphore::try_wait() noexcept
 { return dispatch_semaphore_wait(mSem, DISPATCH_TIME_NOW) == 0; }
 
+} // namespace al
+
 #else /* !__APPLE__ */
+
+#include <cerrno>
+
+namespace al {
 
 semaphore::semaphore(unsigned int initial)
 {
@@ -158,8 +169,8 @@ void semaphore::wait() noexcept
 bool semaphore::try_wait() noexcept
 { return sem_trywait(&mSem) == 0; }
 
-#endif /* __APPLE__ */
-
 } // namespace al
+
+#endif /* __APPLE__ */
 
 #endif /* _WIN32 */

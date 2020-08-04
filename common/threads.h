@@ -1,10 +1,6 @@
 #ifndef AL_THREADS_H
 #define AL_THREADS_H
 
-#include <time.h>
-
-#include <mutex>
-
 #if defined(__GNUC__) && defined(__i386__)
 /* force_align_arg_pointer is required for proper function arguments aligning
  * when SSE code is used. Some systems (Windows, QNX) do not guarantee our
@@ -15,12 +11,9 @@
 #define FORCE_ALIGN
 #endif
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#elif defined(__APPLE__)
+#if defined(__APPLE__)
 #include <dispatch/dispatch.h>
-#else
+#elif !defined(_WIN32)
 #include <semaphore.h>
 #endif
 
@@ -30,7 +23,7 @@ namespace al {
 
 class semaphore {
 #ifdef _WIN32
-    using native_type = HANDLE;
+    using native_type = void*;
 #elif defined(__APPLE__)
     using native_type = dispatch_semaphore_t;
 #else
