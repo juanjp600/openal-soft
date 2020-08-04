@@ -200,11 +200,10 @@ ALC_API ALCboolean ALC_APIENTRY alcCloseDevice(ALCdevice *device);
 /** Obtain the most recent Device error. */
 ALC_API ALCenum ALC_APIENTRY alcGetError(ALCdevice *device);
 
-<<<<<<< HEAD
 ALC_API void ALC_APIENTRY alcSetErrorReasonCallback(void (*c)(const char*));
-=======
+
 /* Extension support. */
->>>>>>> kcatmain
+
 
 /**
  * Query for the presence of an extension on the device. Pass a NULL device to
