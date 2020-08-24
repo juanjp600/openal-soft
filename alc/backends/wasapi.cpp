@@ -911,7 +911,7 @@ HRESULT WasapiPlayback::resetProxy()
             mDevice->FmtChans = DevFmtX51;
         else if(chancount >= 6 && (chanmask&X51RearMask) == X5DOT1REAR)
             mDevice->FmtChans = DevFmtX51Rear;
-        else if(chancount >= 4 && (chanmask&QuadMask) == QUAD)
+        else if(chancount >= 4/* && (chanmask&QuadMask) == QUAD*/)
             mDevice->FmtChans = DevFmtQuad;
         else if(chancount >= 2 && (chanmask&StereoMask) == STEREO)
             mDevice->FmtChans = DevFmtStereo;
@@ -1019,9 +1019,11 @@ HRESULT WasapiPlayback::resetProxy()
         CoTaskMemFree(wfx);
         wfx = nullptr;
 
-        mDevice->Frequency = OutputType.Format.nSamplesPerSec;
-        const uint32_t chancount{OutputType.Format.nChannels};
-        const DWORD chanmask{OutputType.dwChannelMask};
+        const WAVEFORMATEXTENSIBLE& constOutputType = OutputType;
+
+        mDevice->Frequency = constOutputType.Format.nSamplesPerSec;
+        const uint32_t chancount{constOutputType.Format.nChannels};
+        const DWORD chanmask{constOutputType.dwChannelMask};
         if(chancount >= 8 && (chanmask&X71Mask) == X7DOT1)
             mDevice->FmtChans = DevFmtX71;
         else if(chancount >= 7 && (chanmask&X61Mask) == X6DOT1)
@@ -1038,54 +1040,59 @@ HRESULT WasapiPlayback::resetProxy()
             mDevice->FmtChans = DevFmtMono;
         else
         {
-            ERR("Unhandled extensible channels: %d -- 0x%08lx\n", OutputType.Format.nChannels,
-                OutputType.dwChannelMask);
-            mDevice->FmtChans = DevFmtStereo;
-            OutputType.Format.nChannels = 2;
-            OutputType.dwChannelMask = STEREO;
+            ERR("Unhandled extensible channels: %d -- 0x%08lx\n", constOutputType.Format.nChannels,
+                constOutputType.dwChannelMask);
+            /*mDevice->FmtChans = DevFmtStereo;
+            constOutputType.Format.nChannels = 2;
+            constOutputType.dwChannelMask = STEREO;*/
         }
 
-        if(IsEqualGUID(OutputType.SubFormat, KSDATAFORMAT_SUBTYPE_PCM))
+        if(IsEqualGUID(constOutputType.SubFormat, KSDATAFORMAT_SUBTYPE_PCM))
         {
-            if(OutputType.Format.wBitsPerSample == 8)
+            if(constOutputType.Format.wBitsPerSample == 8)
                 mDevice->FmtType = DevFmtUByte;
-            else if(OutputType.Format.wBitsPerSample == 16)
+            else if(constOutputType.Format.wBitsPerSample == 16)
                 mDevice->FmtType = DevFmtShort;
-            else if(OutputType.Format.wBitsPerSample == 32)
+            else if(constOutputType.Format.wBitsPerSample == 32)
                 mDevice->FmtType = DevFmtInt;
             else
             {
+                ERR("Unhandled bits per sample: %d\n", constOutputType.Format.wBitsPerSample);
                 mDevice->FmtType = DevFmtShort;
-                OutputType.Format.wBitsPerSample = 16;
+                //OutputType.Format.wBitsPerSample = 16;
             }
         }
-        else if(IsEqualGUID(OutputType.SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT))
+        else if(IsEqualGUID(constOutputType.SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT))
         {
             mDevice->FmtType = DevFmtFloat;
-            OutputType.Format.wBitsPerSample = 32;
+            if (constOutputType.Format.wBitsPerSample != 32) {
+                ERR("Incorrect bits per sample for SUBTYPE_IEEE_FLOAT: %d\n", constOutputType.Format.wBitsPerSample);
+            }
         }
         else
         {
-            ERR("Unhandled format sub-type: %s\n", GuidPrinter{OutputType.SubFormat}.c_str());
+            ERR("Unhandled format sub-type: %s\n", GuidPrinter{constOutputType.SubFormat}.c_str());
             mDevice->FmtType = DevFmtShort;
-            if(OutputType.Format.wFormatTag != WAVE_FORMAT_EXTENSIBLE)
-                OutputType.Format.wFormatTag = WAVE_FORMAT_PCM;
-            OutputType.Format.wBitsPerSample = 16;
-            OutputType.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+            /*if(constOutputType.Format.wFormatTag != WAVE_FORMAT_EXTENSIBLE)
+                constOutputType.Format.wFormatTag = WAVE_FORMAT_PCM;
+            constOutputType.Format.wBitsPerSample = 16;
+            constOutputType.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;*/
         }
         OutputType.Samples.wValidBitsPerSample = OutputType.Format.wBitsPerSample;
     }
-    mFrameStep = OutputType.Format.nChannels;
+    const WAVEFORMATEXTENSIBLE& constOutputType2 = OutputType;
+
+    mFrameStep = constOutputType2.Format.nChannels;
 
     EndpointFormFactor formfactor{UnknownFormFactor};
     get_device_formfactor(mMMDev, &formfactor);
     mDevice->IsHeadphones = (mDevice->FmtChans == DevFmtStereo
         && (formfactor == Headphones || formfactor == Headset));
 
-    setChannelOrderFromWFXMask(OutputType.dwChannelMask);
+    setChannelOrderFromWFXMask(constOutputType2.dwChannelMask);
 
     hr = mClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        buf_time.count(), 0, &OutputType.Format, nullptr);
+        buf_time.count(), 0, &constOutputType2.Format, nullptr);
     if(FAILED(hr))
     {
         ERR("Failed to initialize audio client: 0x%08lx\n", hr);
