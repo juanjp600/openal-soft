@@ -1032,7 +1032,7 @@ HRESULT WasapiPlayback::resetProxy()
             mDevice->FmtChans = DevFmtX51;
         else if(chancount >= 6 && (chanmask&X51RearMask) == X5DOT1REAR)
             mDevice->FmtChans = DevFmtX51Rear;
-        else if(chancount >= 4 && (chanmask&QuadMask) == QUAD)
+        else if(chancount >= 4/* && (chanmask&QuadMask) == QUAD*/)
             mDevice->FmtChans = DevFmtQuad;
         else if(chancount >= 2 && (chanmask&StereoMask) == STEREO)
             mDevice->FmtChans = DevFmtStereo;
