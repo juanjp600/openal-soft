@@ -1548,9 +1548,14 @@ HRESULT WasapiCapture::resetProxy()
     hr = mClient->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, &OutputType.Format, &wfx);
     if(FAILED(hr))
     {
-        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to check format support (HRESULT ")+toStringHex(hr)+")");
-        ERR("Failed to check format support: 0x%08lx\n", hr);
-        return hr;
+        alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset error: failed to check format support (HRESULT ")+toStringHex(hr)+")");
+        hr = mClient->GetMixFormat(&wfx);
+        if (FAILED(hr))
+        {
+            alcCallErrorReasonCallback(std::string("WASAPI capture proxy reset failed: failed to get mix format (HRESULT ")+toStringHex(hr)+")");
+            ERR("Failed to check format support: 0x%08lx\n", hr);
+            return hr;
+        }
     }
 
     mSampleConv = nullptr;
